@@ -1,0 +1,290 @@
+name: hms-analytics-lab
+
+services:
+  hms-postgres:
+    image: ${HMS_POSTGRES_IMAGE}
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    profiles: [source, cdc-core, full]
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${HMS_POSTGRES_PASSWORD}
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    ports:
+      - "${HMS_POSTGRES_PORT}:5432"
+    volumes:
+      - hms_pg_data:/var/lib/postgresql/data
+      - ./config/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [hms_lab]
+
+  clickhouse:
+    image: ${CLICKHOUSE_IMAGE}
+    profiles: [cdc-core, bi, full]
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: admin
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_DEFAULT_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      PEERDB_CLICKHOUSE_USER: ${PEERDB_CLICKHOUSE_USER}
+      PEERDB_CLICKHOUSE_PASSWORD: ${PEERDB_CLICKHOUSE_PASSWORD}
+      SUPERSET_CLICKHOUSE_USER: ${SUPERSET_CLICKHOUSE_USER}
+      SUPERSET_CLICKHOUSE_PASSWORD: ${SUPERSET_CLICKHOUSE_PASSWORD}
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT}:9000"
+    mem_limit: ${CLICKHOUSE_MEMORY_LIMIT}
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./docker/clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - ./docker/clickhouse/config/01-lab-settings.xml:/etc/clickhouse-server/config.d/01-lab-settings.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --user $$CLICKHOUSE_USER --password $$CLICKHOUSE_PASSWORD --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    networks: [hms_lab]
+
+  superset:
+    image: ${SUPERSET_IMAGE}
+    command: ["/app/docker/entrypoints/run-server.sh"]
+    profiles: [bi, full]
+    environment:
+      SUPERSET_HOME: /app/superset_home
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      SUPERSET_LOAD_EXAMPLES: "no"
+      SQLALCHEMY_DATABASE_URI: sqlite:////app/superset_home/superset.db
+      SUPERSET_ADMIN_USERNAME: ${SUPERSET_ADMIN_USERNAME}
+      SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD}
+      SUPERSET_ADMIN_EMAIL: ${SUPERSET_ADMIN_EMAIL}
+    ports:
+      - "${SUPERSET_PORT}:8088"
+    mem_limit: 1g
+    volumes:
+      - superset_home:/app/superset_home
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8088/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    networks: [hms_lab]
+
+  peerdb-catalog:
+    image: ${HMS_POSTGRES_IMAGE}
+    profiles: [cdc-core, full]
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PEERDB_CATALOG_PASSWORD}
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    ports:
+      - "${PEERDB_CATALOG_PORT}:5432"
+    volumes:
+      - peerdb_catalog_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [hms_lab]
+
+  temporal:
+    image: temporalio/auto-setup:1.29.1
+    profiles: [cdc-core, full]
+    depends_on:
+      peerdb-catalog:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PWD: ${PEERDB_CATALOG_PASSWORD}
+      POSTGRES_SEEDS: peerdb-catalog
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+    volumes:
+      - ./docker/peerdb/temporal-dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+    networks: [hms_lab]
+
+  temporal-admin-tools:
+    image: temporalio/admin-tools:1.25.2-tctl-1.18.1-cli-1.1.1
+    profiles: [cdc-core, full]
+    depends_on:
+      - temporal
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CLI_ADDRESS: temporal:7233
+      TEMPORAL_CLI_SHOW_STACKS: "1"
+    entrypoint: /etc/temporal/entrypoint.sh
+    volumes:
+      - ./docker/peerdb/scripts/mirror-name-search.sh:/etc/temporal/entrypoint.sh:ro
+    healthcheck:
+      test: ["CMD", "tctl", "workflow", "list"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks: [hms_lab]
+
+  flow-migrate:
+    image: ghcr.io/peerdb-io/flow-api:${PEERDB_VERSION}
+    profiles: [cdc-core, full]
+    entrypoint: ["/home/peerdb/peer-flow", "migrate"]
+    environment:
+      PEERDB_CATALOG_HOST: peerdb-catalog
+      PEERDB_CATALOG_PORT: 5432
+      PEERDB_CATALOG_USER: postgres
+      PEERDB_CATALOG_PASSWORD: ${PEERDB_CATALOG_PASSWORD}
+      PEERDB_CATALOG_DATABASE: postgres
+    depends_on:
+      peerdb-catalog:
+        condition: service_healthy
+    networks: [hms_lab]
+
+  flow-api:
+    image: ghcr.io/peerdb-io/flow-api:${PEERDB_VERSION}
+    profiles: [cdc-core, full]
+    environment:
+      PEERDB_CATALOG_HOST: peerdb-catalog
+      PEERDB_CATALOG_PORT: 5432
+      PEERDB_CATALOG_USER: postgres
+      PEERDB_CATALOG_PASSWORD: ${PEERDB_CATALOG_PASSWORD}
+      PEERDB_CATALOG_DATABASE: postgres
+      TEMPORAL_HOST_PORT: temporal:7233
+      PEERDB_TEMPORAL_NAMESPACE: default
+      PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_REGION: us-east-1
+      PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_ENDPOINT_URL_S3: http://minio:9000
+      PEERDB_CLICKHOUSE_AWS_S3_BUCKET_NAME: peerdbbucket
+    depends_on:
+      flow-migrate:
+        condition: service_completed_successfully
+      temporal-admin-tools:
+        condition: service_healthy
+    networks: [hms_lab]
+
+  flow-snapshot-worker:
+    image: ghcr.io/peerdb-io/flow-snapshot-worker:${PEERDB_VERSION}
+    profiles: [cdc-core, full]
+    environment:
+      PEERDB_CATALOG_HOST: peerdb-catalog
+      PEERDB_CATALOG_PORT: 5432
+      PEERDB_CATALOG_USER: postgres
+      PEERDB_CATALOG_PASSWORD: ${PEERDB_CATALOG_PASSWORD}
+      PEERDB_CATALOG_DATABASE: postgres
+      TEMPORAL_HOST_PORT: temporal:7233
+      PEERDB_TEMPORAL_NAMESPACE: default
+      PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_REGION: us-east-1
+      PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_ENDPOINT_URL_S3: http://minio:9000
+      PEERDB_CLICKHOUSE_AWS_S3_BUCKET_NAME: peerdbbucket
+    depends_on:
+      flow-migrate:
+        condition: service_completed_successfully
+      temporal-admin-tools:
+        condition: service_healthy
+    networks: [hms_lab]
+
+  flow-worker:
+    image: ghcr.io/peerdb-io/flow-worker:${PEERDB_VERSION}
+    profiles: [cdc-core, full]
+    environment:
+      PEERDB_CATALOG_HOST: peerdb-catalog
+      PEERDB_CATALOG_PORT: 5432
+      PEERDB_CATALOG_USER: postgres
+      PEERDB_CATALOG_PASSWORD: ${PEERDB_CATALOG_PASSWORD}
+      PEERDB_CATALOG_DATABASE: postgres
+      TEMPORAL_HOST_PORT: temporal:7233
+      PEERDB_TEMPORAL_NAMESPACE: default
+      PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_REGION: us-east-1
+      PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_ENDPOINT_URL_S3: http://minio:9000
+      PEERDB_CLICKHOUSE_AWS_S3_BUCKET_NAME: peerdbbucket
+    depends_on:
+      flow-migrate:
+        condition: service_completed_successfully
+      temporal-admin-tools:
+        condition: service_healthy
+    networks: [hms_lab]
+
+  peerdb-server:
+    image: ghcr.io/peerdb-io/peerdb-server:${PEERDB_VERSION}
+    profiles: [cdc-core, full]
+    stop_signal: SIGINT
+    environment:
+      PEERDB_CATALOG_HOST: peerdb-catalog
+      PEERDB_CATALOG_PORT: 5432
+      PEERDB_CATALOG_USER: postgres
+      PEERDB_CATALOG_PASSWORD: ${PEERDB_CATALOG_PASSWORD}
+      PEERDB_CATALOG_DATABASE: postgres
+      PEERDB_PASSWORD: ${PEERDB_PASSWORD}
+      PEERDB_FLOW_SERVER_ADDRESS: grpc://flow-api:8112
+      PEERDB_MIGRATIONS_DISABLED: "true"
+      RUST_LOG: info
+    ports:
+      - "${PEERDB_SERVER_PORT}:9900"
+    depends_on:
+      flow-migrate:
+        condition: service_completed_successfully
+    networks: [hms_lab]
+
+  peerdb-ui:
+    image: ghcr.io/peerdb-io/peerdb-ui:${PEERDB_VERSION}
+    profiles: [cdc-core, full]
+    environment:
+      PEERDB_CATALOG_HOST: peerdb-catalog
+      PEERDB_CATALOG_PORT: 5432
+      PEERDB_CATALOG_USER: postgres
+      PEERDB_CATALOG_PASSWORD: ${PEERDB_CATALOG_PASSWORD}
+      PEERDB_CATALOG_DATABASE: postgres
+      PEERDB_FLOW_SERVER_HTTP: http://flow-api:8113
+      NEXTAUTH_SECRET: ${PEERDB_PASSWORD}
+      NEXTAUTH_URL: http://localhost:3000
+    ports:
+      - "${PEERDB_UI_PORT}:3000"
+    depends_on:
+      - flow-api
+    networks: [hms_lab]
+
+  minio:
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
+    profiles: [cdc-core, full]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      PEERDB_CLICKHOUSE_AWS_S3_BUCKET_NAME: peerdbbucket
+    entrypoint: >
+      /bin/sh -c "
+      silo server /data --console-address=:36987 &
+      sleep 2;
+      mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
+      mc mb --ignore-existing local/$$PEERDB_CLICKHOUSE_AWS_S3_BUCKET_NAME;
+      wait
+      "
+    ports:
+      - "${MINIO_API_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:36987"
+    volumes:
+      - minio_data:/data
+    networks: [hms_lab]
+
+volumes:
+  hms_pg_data:
+  peerdb_catalog_data:
+  clickhouse_data:
+  superset_home:
+  minio_data:
+
+networks:
+  hms_lab:
+    name: hms_lab

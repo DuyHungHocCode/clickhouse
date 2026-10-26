@@ -1,0 +1,4 @@
+.env
+.superpowers/
+*.log
+data/

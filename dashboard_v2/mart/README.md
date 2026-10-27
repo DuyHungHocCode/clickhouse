@@ -22,8 +22,8 @@ Sau đó chạy `04-validation.sql` với ngày đối soát thực tế.
 ## Các lớp
 
 - Bronze: `hms_raw.<postgres_table>`, không sửa và không query dashboard trực tiếp.
-- Silver canonical facts: `ct_luot_kham`, `ct_dot_noi_tru`, `ct_don_thuoc`, `ct_chi_dinh_dich_vu`, `ct_dong_doanh_thu`; các fact đọc trực tiếp `hms_raw.<postgres_table> FINAL`.
-- Gold: `dm_luot_kham_ngay`, `dm_noi_tru_ngay`, `dm_don_thuoc_ngay`, `dm_doanh_thu_ngay`.
+- Silver canonical facts: `ct_luot_kham`, `ct_kham_benh`, `ct_dot_noi_tru`, `ct_chuyen_vien`, `ct_don_thuoc`, `ct_chi_dinh_dich_vu`, `ct_xac_nhan_chi_phi`, `ct_gioi_tinh_tiep_nhan`, `ct_doi_tuong_benh_nhan`, `ct_dong_doanh_thu`, `ct_icd10`; các fact đọc trực tiếp `hms_raw.<postgres_table> FINAL`.
+- Gold: `dm_luot_kham_ngay`, `dm_kham_benh_ngay`, `dm_noi_tru_ngay`, `dm_chuyen_vien_ngay`, `dm_don_thuoc_ngay`, `dm_xac_nhan_chi_phi_ngay`, `dm_gioi_tinh_ngay`, `dm_doi_tuong_benh_nhan_ngay`, `dm_doanh_thu_ngay`, `dm_icd10`, `dm_dashboard_ngay`.
 
 ## Quy tắc giữ nguyên từ function PostgreSQL
 
@@ -32,6 +32,7 @@ Sau đó chạy `04-validation.sql` với ngày đối soát thực tế.
 - Doanh thu: đã thanh toán, không hoàn trả, không hủy hóa đơn, loại sổ `SBL`.
 - Doanh thu: tiền cùng chi trả cộng tiền bệnh nhân tự thanh toán.
 - Khoảng ngày: nửa mở, từ ngày bao gồm và ngày kết thúc loại trừ sau `to_date`.
+- `dm_dashboard_ngay` là semantic mart đối soát `fn_dashboard_summary`; dashboard tự chọn current/previous period từ mart này.
 
 ## Bed capacity
 

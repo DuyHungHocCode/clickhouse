@@ -32,6 +32,20 @@ FROM hms_silver.ct_dong_doanh_thu
 GROUP BY ngay_thu, nhom_doanh_thu
 ORDER BY ngay_thu, nhom_doanh_thu;
 
+-- Daily semantic mart: use this output to reconcile fn_dashboard_summary.
+SELECT *
+FROM hms_gold.dm_dashboard_ngay
+WHERE ngay >= toDate({from_date:Date})
+  AND ngay < toDate({to_date:Date}) + 1
+ORDER BY ngay;
+
+-- ICD-10 mart preserves the three different measures used by the function.
+SELECT *
+FROM hms_gold.dm_icd10
+WHERE ngay >= toDate({from_date:Date})
+  AND ngay < toDate({to_date:Date}) + 1
+ORDER BY ngay, loai_thanh_toan, ma_icd10;
+
 -- Gold must not contain direct patient identifiers.
 SELECT name
 FROM system.columns

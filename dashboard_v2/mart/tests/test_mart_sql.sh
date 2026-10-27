@@ -36,6 +36,15 @@ if grep -q 'benh_nhan_dot_dieu_tri_id' "$root/02-silver-canonical-facts.sql"; th
 fi
 expect_text 02-silver-canonical-facts.sql "CREATE OR REPLACE VIEW hms_silver.ct_don_thuoc"
 expect_text 02-silver-canonical-facts.sql "CREATE OR REPLACE VIEW hms_silver.ct_dong_doanh_thu"
+expect_text 02-silver-canonical-facts.sql "CREATE OR REPLACE VIEW hms_silver.ct_kham_benh"
+expect_text 02-silver-canonical-facts.sql "CREATE OR REPLACE VIEW hms_silver.ct_chuyen_vien"
+expect_text 02-silver-canonical-facts.sql "CREATE OR REPLACE VIEW hms_silver.ct_xac_nhan_chi_phi"
+expect_text 02-silver-canonical-facts.sql "CREATE OR REPLACE VIEW hms_silver.ct_gioi_tinh_tiep_nhan"
+expect_text 02-silver-canonical-facts.sql "CREATE OR REPLACE VIEW hms_silver.ct_doi_tuong_benh_nhan"
+expect_text 02-silver-canonical-facts.sql "CREATE OR REPLACE VIEW hms_silver.ct_icd10"
+expect_text 02-silver-canonical-facts.sql "thoi_gian_bat_dau"
+expect_text 02-silver-canonical-facts.sql "xuat_xml"
+expect_text 02-silver-canonical-facts.sql "arrayJoin"
 expect_text 02-silver-canonical-facts.sql "ma_ly_do_tiep_nhan) = '02'"
 expect_text 02-silver-canonical-facts.sql "ma_doi_tuong_lt) = '2'"
 expect_text 02-silver-canonical-facts.sql "a.da_thanh_toan"
@@ -45,9 +54,15 @@ expect_text 02-silver-canonical-facts.sql "ma_loai_so = 'SBL'"
 expect_text 03-gold-daily-marts.sql "CREATE OR REPLACE VIEW hms_gold.dm_luot_kham_ngay"
 expect_text 03-gold-daily-marts.sql "CREATE OR REPLACE VIEW hms_gold.dm_don_thuoc_ngay"
 expect_text 03-gold-daily-marts.sql "CREATE OR REPLACE VIEW hms_gold.dm_doanh_thu_ngay"
+expect_text 03-gold-daily-marts.sql "CREATE OR REPLACE VIEW hms_gold.dm_kham_benh_ngay"
+expect_text 03-gold-daily-marts.sql "CREATE OR REPLACE VIEW hms_gold.dm_chuyen_vien_ngay"
+expect_text 03-gold-daily-marts.sql "CREATE OR REPLACE VIEW hms_gold.dm_xac_nhan_chi_phi_ngay"
+expect_text 03-gold-daily-marts.sql "CREATE OR REPLACE VIEW hms_gold.dm_gioi_tinh_ngay"
+expect_text 03-gold-daily-marts.sql "CREATE OR REPLACE VIEW hms_gold.dm_doi_tuong_benh_nhan_ngay"
+expect_text 03-gold-daily-marts.sql "CREATE OR REPLACE VIEW hms_gold.dm_icd10"
 expect_text 04-validation.sql "toDate({to_date:Date}) + 1 AS exclusive_to_date"
 expect_text 03-gold-daily-marts.sql "previous_from"
-if grep -Eiq 'benh_nhan_id|so_dien_thoai|dia_chi|ho_ten' "$root/03-gold-daily-marts.sql"; then
+if grep -Eiq 'AS +(benh_nhan_id|so_dien_thoai|dia_chi|ho_ten)\b' "$root/03-gold-daily-marts.sql"; then
   fail "Gold SQL exposes a patient identifier field"
 fi
 

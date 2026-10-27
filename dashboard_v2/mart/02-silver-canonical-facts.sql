@@ -19,7 +19,7 @@ LEFT JOIN (
     SELECT DISTINCT tiep_nhan_id
     FROM hms_raw.kb_kham_benh FINAL
 ) kb ON kb.tiep_nhan_id = tn.id
-;
+WHERE toString(ifNull(tn.bi_xoa, 0)) IN ('0', 'false', 'f');
 
 CREATE OR REPLACE VIEW hms_silver.ct_dot_noi_tru AS
 WITH events AS (
@@ -29,6 +29,7 @@ WITH events AS (
         CAST(NULL AS Nullable(Date)) AS ngay_ra_vien,
         'ADMISSION' AS loai_su_kien
     FROM hms_raw.csyt_benh_an_dieu_tri FINAL
+    WHERE toString(ifNull(bi_xoa, 0)) IN ('0', 'false', 'f')
     UNION ALL
     SELECT
         toString(ifNull(benh_an_id, id)) AS dot_noi_tru_key,
@@ -36,6 +37,7 @@ WITH events AS (
         toDate(thoi_gian_ra_vien) AS ngay_ra_vien,
         'DISCHARGE' AS loai_su_kien
     FROM hms_raw.csyt_phieu_ra_vien FINAL
+    WHERE toString(ifNull(bi_xoa, 0)) IN ('0', 'false', 'f')
 )
 SELECT
     dot_noi_tru_key,
@@ -58,7 +60,7 @@ SELECT
     id AS chi_dinh_id,
     toDate(ngay_chi_dinh) AS ngay_chi_dinh
 FROM hms_raw.phieu_dich_vu_chi_tiet FINAL
-;
+WHERE toString(ifNull(bi_xoa, 0)) IN ('0', 'false', 'f');
 
 CREATE OR REPLACE VIEW hms_silver.ct_dong_doanh_thu AS
 SELECT
@@ -78,3 +80,111 @@ WHERE toString(ifNull(a.da_thanh_toan, 0)) IN ('1', 'true', 't')
   AND toString(ifNull(a.hoan_tra, 0)) IN ('0', 'false', 'f')
   AND toString(ifNull(a.huy_hoa_don, 0)) IN ('0', 'false', 'f')
   AND sthd.ma_loai_so = 'SBL';
+
+CREATE OR REPLACE VIEW hms_silver.ct_kham_benh AS
+SELECT
+    id AS kham_benh_id,
+    tiep_nhan_id,
+    toDate(thoi_gian_bat_dau) AS ngay_kham
+FROM hms_raw.kb_kham_benh FINAL
+WHERE toString(ifNull(bi_xoa, 0)) IN ('0', 'false', 'f');
+
+CREATE OR REPLACE VIEW hms_silver.ct_chuyen_vien AS
+SELECT
+    id AS chuyen_vien_id,
+    toDate(ngay_lap) AS ngay_chuyen_vien
+FROM hms_raw.kb_kham_benh_chuyen_vien FINAL
+WHERE toString(ifNull(bi_xoa, 0)) IN ('0', 'false', 'f');
+
+CREATE OR REPLACE VIEW hms_silver.ct_xac_nhan_chi_phi AS
+SELECT
+    id AS xac_nhan_chi_phi_id,
+    toDate(ngay_xac_nhan) AS ngay_xac_nhan,
+    toUInt8(toString(ifNull(xuat_xml, 0)) IN ('1', 'true', 't')) AS is_xuat_xml
+FROM hms_raw.csyt_xac_nhan_chi_phi FINAL
+WHERE toString(ifNull(bi_xoa, 0)) IN ('0', 'false', 'f');
+
+CREATE OR REPLACE VIEW hms_silver.ct_gioi_tinh_tiep_nhan AS
+SELECT
+    bn.id AS benh_nhan_tiep_nhan_id,
+    tn.id AS tiep_nhan_id,
+    toDate(tn.ngay_tiep_nhan) AS ngay_tiep_nhan,
+    multiIf(
+        toString(bn.ma_gioi_tinh) = '2', 'NAM',
+        toString(bn.ma_gioi_tinh) = '1', 'NU',
+        'CHUA_XAC_DINH'
+    ) AS gioi_tinh
+FROM (SELECT * FROM hms_raw.benh_nhan_tiep_nhan FINAL) AS bn
+INNER JOIN (SELECT * FROM hms_raw.tiep_nhan FINAL) AS tn ON tn.id = bn.tiep_nhan_id
+WHERE toString(ifNull(bn.bi_xoa, 0)) IN ('0', 'false', 'f')
+  AND toString(ifNull(tn.bi_xoa, 0)) IN ('0', 'false', 'f');
+
+CREATE OR REPLACE VIEW hms_silver.ct_doi_tuong_benh_nhan AS
+SELECT
+    a.id AS dot_dieu_tri_id,
+    toDate(tn.ngay_tiep_nhan) AS ngay_tiep_nhan,
+    multiIf(
+        a.is_bhyt = 1 AND toString(a.ma_quyen_loi) = '5', 'CAN_BO_CAND',
+        (a.is_bhyt = 1 AND toString(a.ma_quyen_loi) IN ('1', '2', '3', '4')) OR a.is_bhyt = 0, 'NGUOI_DAN',
+        'KHONG_XEP_LOAI'
+    ) AS loai_doi_tuong
+FROM (SELECT * FROM hms_raw.benh_nhan_dot_dieu_tri FINAL) AS a
+INNER JOIN (SELECT * FROM hms_raw.tiep_nhan FINAL) AS tn ON tn.id = a.tiep_nhan_id
+WHERE toString(ifNull(a.bi_xoa, 0)) IN ('0', 'false', 'f')
+  AND toString(ifNull(tn.bi_xoa, 0)) IN ('0', 'false', 'f');
+
+CREATE OR REPLACE VIEW hms_silver.ct_icd10 AS
+WITH nguon AS (
+    SELECT
+        'BHYT' AS loai_thanh_toan,
+        toDate(ngay_ra) AS ngay_ra,
+        toString(ifNull(ma_benh_chinh, '')) AS ma_benh_chinh,
+        toString(ifNull(ma_benh_kem_theo, '')) AS ma_benh_kem_theo,
+        toString(ma_lk) AS ma_lk,
+        benh_nhan_id
+    FROM hms_raw.csyt_xac_nhan_chi_phi FINAL
+    WHERE toString(ifNull(bi_xoa, 0)) IN ('0', 'false', 'f')
+    UNION ALL
+    SELECT
+        'VIEN_PHI' AS loai_thanh_toan,
+        toDate(ngay_ra) AS ngay_ra,
+        toString(ifNull(ma_benh_chinh, '')) AS ma_benh_chinh,
+        toString(ifNull(ma_benh_kem_theo, '')) AS ma_benh_kem_theo,
+        toString(ma_lk) AS ma_lk,
+        benh_nhan_id
+    FROM hms_raw.csyt_xac_nhan_chi_phi_vien_phi FINAL
+    WHERE toString(ifNull(bi_xoa, 0)) IN ('0', 'false', 'f')
+), du_lieu_icd AS (
+    SELECT
+        loai_thanh_toan,
+        ngay_ra,
+        ma_lk,
+        benh_nhan_id,
+        arrayJoin(arrayDistinct(arrayFilter(x -> x != '', arrayMap(x -> upper(trimBoth(x)), arrayConcat([ma_benh_chinh], splitByChar(';', ma_benh_kem_theo)))))) AS ma_icd10
+    FROM nguon
+), danh_muc_icd AS (
+    SELECT
+        upper(trimBoth(toString(di.ma))) AS ma_icd10,
+        toString(di.ten) AS ten_benh,
+        toString(dni.ma) AS ma_nhom_icd10,
+        toString(dni.ten) AS ten_nhom_icd10,
+        toString(dci.ma) AS ma_chuong_icd10,
+        toString(dci.ten) AS ten_chuong_icd10
+    FROM (SELECT * FROM hms_raw.dmc_icd10 FINAL) AS di
+    LEFT JOIN (SELECT * FROM hms_raw.dm_nhom_icd10 FINAL) AS dni ON dni.id = di.nhom_icd10_id
+    LEFT JOIN (SELECT * FROM hms_raw.dm_chuong_icd10 FINAL) AS dci ON dci.ma = dni.chuong_icd10_ma
+    WHERE toString(ifNull(di.bi_xoa, 0)) IN ('0', 'false', 'f')
+)
+SELECT
+    dl.ngay_ra,
+    coalesce(dm.ma_chuong_icd10, '') AS ma_chuong_icd10,
+    coalesce(dm.ten_chuong_icd10, '') AS ten_chuong_icd10,
+    coalesce(dm.ma_nhom_icd10, '') AS ma_nhom_icd10,
+    coalesce(dm.ten_nhom_icd10, '') AS ten_nhom_icd10,
+    dl.ma_icd10,
+    coalesce(dm.ten_benh, '') AS ten_benh,
+    dl.loai_thanh_toan,
+    dl.ma_lk,
+    dl.benh_nhan_id
+FROM du_lieu_icd AS dl
+LEFT JOIN danh_muc_icd AS dm ON dm.ma_icd10 = dl.ma_icd10;

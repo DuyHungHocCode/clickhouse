@@ -8,10 +8,11 @@ services:
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?copy .env.example to .env and set CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     ports:
-      - "127.0.0.1:8123:8123"
-      - "127.0.0.1:9000:9000"
+      - "100.90.202.114:8123:8123"
+      - "100.90.202.114:9000:9000"
     volumes:
       - clickhouse_data:/var/lib/clickhouse
+    networks: [hms_cdc]
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --user admin --password $$CLICKHOUSE_PASSWORD --query 'SELECT 1'"]
       interval: 10s
@@ -20,3 +21,7 @@ services:
 
 volumes:
   clickhouse_data:
+
+networks:
+  hms_cdc:
+    name: hms_cdc

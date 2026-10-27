@@ -1,0 +1,52 @@
+CREATE PEER hms_source FROM POSTGRES WITH (
+  host = '__HMS_SOURCE_HOST__',
+  port = __HMS_SOURCE_PORT__,
+  user = '__HMS_SOURCE_USER__',
+  password = '__HMS_SOURCE_PASSWORD__',
+  database = '__HMS_SOURCE_DATABASE__'
+);
+
+CREATE PEER hms_raw FROM CLICKHOUSE WITH (
+  host = 'clickhouse',
+  port = 9000,
+  user = 'peerdb_hms',
+  password = '__PEERDB_CLICKHOUSE_PASSWORD__',
+  database = 'hms_raw',
+  disable_tls = true
+);
+
+CREATE MIRROR hms_pg_to_ch_raw
+FROM hms_source TO hms_raw
+WITH TABLE MAPPING (
+  tenant_bvcahn.tiep_nhan:raw_tiep_nhan,
+  tenant_bvcahn.benh_nhan_tiep_nhan:raw_benh_nhan_tiep_nhan,
+  tenant_bvcahn.benh_nhan_dot_dieu_tri:raw_benh_nhan_dot_dieu_tri,
+  tenant_bvcahn.kb_kham_benh:raw_kb_kham_benh,
+  tenant_bvcahn.kb_kham_benh_chuyen_vien:raw_kb_kham_benh_chuyen_vien,
+  tenant_bvcahn.csyt_benh_an_dieu_tri:raw_csyt_benh_an_dieu_tri,
+  tenant_bvcahn.csyt_phieu_ra_vien:raw_csyt_phieu_ra_vien,
+  tenant_bvcahn.phieu_dich_vu_chi_tiet:raw_phieu_dich_vu_chi_tiet,
+  tenant_bvcahn.csyt_yl_thuocvt:raw_csyt_yl_thuocvt,
+  tenant_bvcahn.csyt_vien_phi_chung_tu:raw_csyt_vien_phi_chung_tu,
+  tenant_bvcahn.csyt_vien_phi_chung_tu_chi_tiet:raw_csyt_vien_phi_chung_tu_chi_tiet,
+  tenant_bvcahn.dm_so_thu_hoa_don:raw_dm_so_thu_hoa_don,
+  tenant_bvcahn.dmc_ma_nhom_chi_phi:raw_dmc_ma_nhom_chi_phi,
+  tenant_bvcahn.csyt_xac_nhan_chi_phi:raw_csyt_xac_nhan_chi_phi,
+  tenant_bvcahn.csyt_xac_nhan_chi_phi_vien_phi:raw_csyt_xac_nhan_chi_phi_vien_phi,
+  tenant_bvcahn.dmc_icd10:raw_dmc_icd10,
+  tenant_bvcahn.dm_nhom_icd10:raw_dm_nhom_icd10,
+  tenant_bvcahn.dm_chuong_icd10:raw_dm_chuong_icd10,
+  tenant_bvcahn.dmc_doi_tuong_kcb:raw_dmc_doi_tuong_kcb
+)
+WITH (
+  do_initial_copy = true,
+  max_batch_size = 10000,
+  sync_interval = 2,
+  publication_name = 'peerdb_hms_publication',
+  soft_delete = true,
+  synced_at_col_name = '_peerdb_synced_at',
+  soft_delete_col_name = '_peerdb_is_deleted',
+  snapshot_num_rows_per_partition = 100000,
+  snapshot_max_parallel_workers = 1,
+  snapshot_num_tables_in_parallel = 1
+);

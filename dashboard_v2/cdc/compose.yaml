@@ -1,0 +1,166 @@
+name: hms-peerdb
+
+x-catalog-env: &catalog-env
+  PEERDB_CATALOG_HOST: catalog
+  PEERDB_CATALOG_PORT: 5432
+  PEERDB_CATALOG_USER: postgres
+  PEERDB_CATALOG_PASSWORD: ${PEERDB_CATALOG_PASSWORD}
+  PEERDB_CATALOG_DATABASE: postgres
+
+x-flow-env: &flow-env
+  TEMPORAL_HOST_PORT: temporal:7233
+  PEERDB_TEMPORAL_NAMESPACE: default
+  PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+  PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+  PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_REGION: us-east-1
+  PEERDB_CLICKHOUSE_AWS_CREDENTIALS_AWS_ENDPOINT_URL_S3: http://minio:9000
+  PEERDB_CLICKHOUSE_AWS_S3_BUCKET_NAME: peerdbbucket
+
+services:
+  catalog:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PEERDB_CATALOG_PASSWORD}
+    volumes: [peerdb_catalog_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [peerdb_internal]
+
+  temporal:
+    image: temporalio/auto-setup:1.29.1
+    depends_on:
+      catalog:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PWD: ${PEERDB_CATALOG_PASSWORD}
+      POSTGRES_SEEDS: catalog
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+    volumes:
+      - ./config/temporal-dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+    networks: [peerdb_internal]
+
+  temporal-admin-tools:
+    image: temporalio/admin-tools:1.25.2-tctl-1.18.1-cli-1.1.1
+    depends_on: [temporal]
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CLI_ADDRESS: temporal:7233
+    entrypoint: /etc/temporal/entrypoint.sh
+    volumes:
+      - ./scripts/temporal-bootstrap.sh:/etc/temporal/entrypoint.sh:ro
+    healthcheck:
+      test: ["CMD", "tctl", "workflow", "list"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks: [peerdb_internal]
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes: [peerdb_minio_data:/data]
+    networks: [peerdb_internal, hms_cdc]
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on: [minio]
+    entrypoint: >
+      /bin/sh -c "until mc alias set peerdb http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD; do sleep 2; done; mc mb --ignore-existing peerdb/peerdbbucket"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    networks: [peerdb_internal]
+
+  flow-migrate:
+    image: ghcr.io/peerdb-io/flow-api:${PEERDB_VERSION}
+    entrypoint: ["/home/peerdb/peer-flow", "migrate"]
+    environment: *catalog-env
+    depends_on:
+      catalog:
+        condition: service_healthy
+    networks: [peerdb_internal]
+
+  flow-api:
+    image: ghcr.io/peerdb-io/flow-api:${PEERDB_VERSION}
+    environment:
+      <<: [*catalog-env, *flow-env]
+    depends_on:
+      flow-migrate:
+        condition: service_completed_successfully
+      temporal-admin-tools:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    networks: [peerdb_internal, hms_cdc]
+
+  flow-snapshot-worker:
+    image: ghcr.io/peerdb-io/flow-snapshot-worker:${PEERDB_VERSION}
+    environment:
+      <<: [*catalog-env, *flow-env]
+    depends_on:
+      flow-migrate:
+        condition: service_completed_successfully
+      temporal-admin-tools:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    networks: [peerdb_internal, hms_cdc]
+
+  flow-worker:
+    image: ghcr.io/peerdb-io/flow-worker:${PEERDB_VERSION}
+    environment:
+      <<: [*catalog-env, *flow-env]
+    depends_on:
+      flow-migrate:
+        condition: service_completed_successfully
+      temporal-admin-tools:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    networks: [peerdb_internal, hms_cdc]
+
+  peerdb-server:
+    image: ghcr.io/peerdb-io/peerdb-server:${PEERDB_VERSION}
+    stop_signal: SIGINT
+    environment:
+      <<: *catalog-env
+      PEERDB_PASSWORD: ${PEERDB_PASSWORD}
+      PEERDB_FLOW_SERVER_ADDRESS: grpc://flow-api:8112
+      PEERDB_MIGRATIONS_DISABLED: "true"
+    ports: ["${PEERDB_SERVER_BIND}:9900"]
+    depends_on:
+      flow-migrate:
+        condition: service_completed_successfully
+    networks: [peerdb_internal]
+
+  peerdb-ui:
+    image: ghcr.io/peerdb-io/peerdb-ui:${PEERDB_VERSION}
+    environment:
+      <<: *catalog-env
+      PEERDB_FLOW_SERVER_HTTP: http://flow-api:8113
+      NEXTAUTH_SECRET: ${PEERDB_PASSWORD}
+      NEXTAUTH_URL: http://localhost:3000
+    ports: ["${PEERDB_UI_BIND}:3000"]
+    depends_on: [flow-api]
+    networks: [peerdb_internal]
+
+volumes:
+  peerdb_catalog_data:
+  peerdb_minio_data:
+
+networks:
+  peerdb_internal:
+  hms_cdc:
+    external: true
+    name: hms_cdc

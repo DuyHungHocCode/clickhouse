@@ -24,14 +24,14 @@ LEFT JOIN (
 CREATE OR REPLACE VIEW hms_silver.ct_dot_noi_tru AS
 WITH events AS (
     SELECT
-        toString(ifNull(benh_nhan_dot_dieu_tri_id, id)) AS dot_noi_tru_key,
+        toString(id) AS dot_noi_tru_key,
         toDate(ngay_vao_vien) AS ngay_vao_vien,
         CAST(NULL AS Nullable(Date)) AS ngay_ra_vien,
         'ADMISSION' AS loai_su_kien
     FROM hms_raw.csyt_benh_an_dieu_tri FINAL
     UNION ALL
     SELECT
-        toString(ifNull(benh_nhan_dot_dieu_tri_id, id)) AS dot_noi_tru_key,
+        toString(ifNull(benh_an_id, id)) AS dot_noi_tru_key,
         CAST(NULL AS Nullable(Date)) AS ngay_vao_vien,
         toDate(thoi_gian_ra_vien) AS ngay_ra_vien,
         'DISCHARGE' AS loai_su_kien

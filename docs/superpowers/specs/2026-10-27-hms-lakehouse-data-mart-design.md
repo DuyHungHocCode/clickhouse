@@ -128,7 +128,7 @@ Silver chỉ gồm canonical facts. Các fact đọc trực tiếp bảng Bronze
 | `ct_dong_doanh_thu` | 1 dòng doanh thu đã thu | 4 bảng doanh thu và danh mục | doanh thu theo ngày/nguồn thu |
 | `ct_ngay_giuong` | 1 ngày × cơ sở × khoa × giường | bảng phân giường và kế hoạch giường | công suất giường |
 
-Trong bản triển khai đầu tiên, `ct_dot_noi_tru` được dựng từ hai event source `csyt_benh_an_dieu_tri` và `csyt_phieu_ra_vien`, sau đó gom về một dòng theo `benh_nhan_dot_dieu_tri_id` (fallback về `id`). Nếu dữ liệu thực tế có khóa episode khác, phải đổi mapping trước khi dùng KPI overlap.
+Trong bản triển khai đầu tiên, `ct_dot_noi_tru` được dựng từ hai event source `csyt_benh_an_dieu_tri` và `csyt_phieu_ra_vien`, sau đó gom về một dòng theo `csyt_benh_an_dieu_tri.id` và `csyt_phieu_ra_vien.benh_an_id`. Nếu dữ liệu thực tế có khóa episode khác, phải đổi mapping trước khi dùng KPI overlap.
 
 Các fact phải mang các khóa phân tích đã chuẩn hóa: `ngay`, `ma_co_so`, `ma_khoa_phong`, `doi_tuong`, `gioi_tinh`, `nhom_tuoi` và `nhom_doanh_thu` nếu nguồn có thể xác định.
 

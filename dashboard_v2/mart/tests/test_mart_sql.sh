@@ -29,6 +29,11 @@ expect_text 00-databases.sql "CREATE DATABASE IF NOT EXISTS hms_silver"
 expect_text 00-databases.sql "CREATE DATABASE IF NOT EXISTS hms_gold"
 expect_text 02-silver-canonical-facts.sql "CREATE OR REPLACE VIEW hms_silver.ct_luot_kham"
 expect_text 02-silver-canonical-facts.sql "CREATE OR REPLACE VIEW hms_silver.ct_dot_noi_tru"
+expect_text 02-silver-canonical-facts.sql "toString(id) AS dot_noi_tru_key"
+expect_text 02-silver-canonical-facts.sql "ifNull(benh_an_id, id)"
+if grep -q 'benh_nhan_dot_dieu_tri_id' "$root/02-silver-canonical-facts.sql"; then
+  fail "inpatient fact uses a non-existent inpatient key"
+fi
 expect_text 02-silver-canonical-facts.sql "CREATE OR REPLACE VIEW hms_silver.ct_don_thuoc"
 expect_text 02-silver-canonical-facts.sql "CREATE OR REPLACE VIEW hms_silver.ct_dong_doanh_thu"
 expect_text 02-silver-canonical-facts.sql "ma_ly_do_tiep_nhan) = '02'"

@@ -9,6 +9,7 @@ GRANT SELECT ON hms_gold.dm_kham_benh_ngay TO dashboard_view_owner;
 GRANT SELECT ON hms_gold.dm_noi_tru_ngay TO dashboard_view_owner;
 GRANT SELECT ON hms_gold.dm_don_thuoc_ngay TO dashboard_view_owner;
 GRANT SELECT ON hms_gold.dm_xac_nhan_chi_phi_ngay TO dashboard_view_owner;
+GRANT SELECT ON hms_gold.dm_chuyen_vien_ngay TO dashboard_view_owner;
 GRANT SELECT ON hms_gold.dm_doanh_thu_ngay TO dashboard_view_owner;
 GRANT SELECT ON hms_gold.dm_icd10 TO dashboard_view_owner;
 GRANT SELECT ON hms_silver.ct_luot_kham TO dashboard_view_owner;
@@ -16,6 +17,7 @@ GRANT SELECT ON hms_silver.ct_kham_benh TO dashboard_view_owner;
 GRANT SELECT ON hms_silver.ct_dot_noi_tru TO dashboard_view_owner;
 GRANT SELECT ON hms_silver.ct_don_thuoc TO dashboard_view_owner;
 GRANT SELECT ON hms_silver.ct_xac_nhan_chi_phi TO dashboard_view_owner;
+GRANT SELECT ON hms_silver.ct_chuyen_vien TO dashboard_view_owner;
 GRANT SELECT ON hms_silver.ct_dong_doanh_thu TO dashboard_view_owner;
 GRANT SELECT ON hms_silver.ct_icd10 TO dashboard_view_owner;
 

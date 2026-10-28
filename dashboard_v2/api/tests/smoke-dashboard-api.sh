@@ -26,6 +26,11 @@ printf 'user = "%s:%s"\n' \
 
 base_url="${CLICKHOUSE_URL%/}"
 
+authenticated_body="$(curl --config "$curl_config" --fail-with-body --silent --show-error --get \
+  --data-urlencode 'query=SELECT 1' \
+  "$base_url/")"
+test "$authenticated_body" = '1' || { echo "dashboard API authentication check failed" >&2; exit 1; }
+
 request_handler() {
   local path="$1"
   local body
@@ -51,11 +56,24 @@ case "$unauthenticated_status" in
   *) echo "expected 401 or 403 without credentials, got $unauthenticated_status" >&2; exit 1 ;;
 esac
 
-raw_status="$(curl --config "$curl_config" --silent --show-error --output /dev/null --write-out '%{http_code}' --get \
-  --data-urlencode 'query=SELECT count() FROM hms_raw.benh_nhan_dot_dieu_tri' \
-  "$base_url/")"
-case "$raw_status" in
-  2*) echo "dashboard API user can read hms_raw" >&2; exit 1 ;;
-esac
+expect_access_denied() {
+  local query="$1" response body status
+
+  response="$(curl --config "$curl_config" --silent --show-error --write-out $'\n%{http_code}' --get \
+    --data-urlencode "query=$query" \
+    "$base_url/")"
+  status="${response##*$'\n'}"
+  body="${response%$'\n'*}"
+
+  case "$status" in
+    4*|5*) ;;
+    *) echo "expected denied query to fail, got HTTP $status" >&2; exit 1 ;;
+  esac
+  printf '%s\n' "$body" | grep -Fq 'ACCESS_DENIED' || { echo "expected ACCESS_DENIED, got: $body" >&2; exit 1; }
+}
+
+expect_access_denied 'SELECT count() FROM hms_raw.benh_nhan_dot_dieu_tri'
+expect_access_denied 'SELECT count() FROM hms_silver.ct_luot_kham'
+expect_access_denied 'SELECT count() FROM hms_gold.dm_luot_kham_ngay'
 
 echo "PASS: dashboard API smoke test"

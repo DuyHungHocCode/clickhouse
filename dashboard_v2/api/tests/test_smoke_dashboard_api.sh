@@ -22,12 +22,23 @@ empty_response_path="$(mktemp -d)"
 trap 'rm -rf "$empty_response_path"' EXIT
 ln -s "$curl_fixture" "$empty_response_path/curl"
 
-PATH="$empty_response_path:$PATH" \
-CLICKHOUSE_URL='https://clickhouse.test:8443' \
-DASHBOARD_API_USER='dashboard_api' \
-DASHBOARD_API_PASSWORD='test-password' \
-FROM_DATE=2026-10-01 \
-TO_DATE=2026-10-31 \
-"$smoke" >/dev/null || fail "smoke script rejected a valid empty JSONEachRow response"
+run_smoke() {
+  PATH="$empty_response_path:$PATH" \
+  CLICKHOUSE_URL='https://clickhouse.test:8443' \
+  DASHBOARD_API_USER='dashboard_api' \
+  DASHBOARD_API_PASSWORD='test-password' \
+  FROM_DATE=2026-10-01 \
+  TO_DATE=2026-10-31 \
+  "$smoke"
+}
+
+set +e
+denial_output="$(run_smoke 2>&1)"
+denial_status=$?
+set -e
+test "$denial_status" -ne 0 || fail "smoke script accepted an unrelated HTTP 500 as access denial"
+printf '%s\n' "$denial_output" | grep -Fq 'ACCESS_DENIED' || fail "smoke script did not require ACCESS_DENIED"
+
+CURL_FIXTURE_DENIAL_BODY='Code: 497. DB::Exception: ACCESS_DENIED' run_smoke >/dev/null || fail "smoke script rejected valid access denials"
 
 echo "PASS: smoke preflight contract"

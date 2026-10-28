@@ -38,4 +38,36 @@ Các endpoint dashboard sẽ được khai báo bởi SQL trong `api/`, sau khi 
 đã được tạo. Khi dashboard chạy trên origin khác, đặt CORS/TLS ở reverse proxy
 của server đích; không mở rộng CORS trực tiếp trong Compose này.
 
+## Deploy API dashboard ở server đích
+
+Chạy các mart theo thứ tự trong `mart/README.md` trước, rồi nạp password API
+từ secret store của server vào biến `DASHBOARD_API_PASSWORD`. Không đưa password
+vào file SQL, `.env`, lệnh đã lưu trong shell history, hoặc ticket triển khai.
+
+```bash
+docker compose exec -T clickhouse clickhouse-client \
+  --user admin --password "$CLICKHOUSE_PASSWORD" \
+  --param_dashboard_api_password "$DASHBOARD_API_PASSWORD" \
+  --multiquery < api/01-dashboard-api.sql
+
+docker compose exec -T clickhouse clickhouse-client \
+  --user admin --password "$CLICKHOUSE_PASSWORD" \
+  --param_from_date=2026-10-01 --param_to_date=2026-10-31 \
+  --multiquery < api/02-verify-dashboard-api.sql
+```
+
+Smoke test cần `curl` và `jq`; chỉ chạy từ máy có thể kết nối đến ClickHouse:
+
+```bash
+CLICKHOUSE_URL='https://clickhouse.example:8443' \
+DASHBOARD_API_USER='dashboard_api' \
+DASHBOARD_API_PASSWORD="$DASHBOARD_API_PASSWORD" \
+FROM_DATE=2026-10-01 TO_DATE=2026-10-31 \
+api/tests/smoke-dashboard-api.sh
+```
+
+Smoke test kiểm tra ba handler, JSON response, authentication bắt buộc và việc
+`dashboard_api` bị từ chối khi đọc raw data. Nó không chạy trong máy phát triển
+này vì ClickHouse đích chưa sẵn sàng.
+
 Stop without deleting data: `docker compose down`.

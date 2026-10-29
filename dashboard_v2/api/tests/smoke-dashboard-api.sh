@@ -46,6 +46,14 @@ request_handler() {
 request_handler '/api/v1/dashboard-summary'
 request_handler '/api/v1/revenue-daily'
 request_handler '/api/v1/icd10'
+request_handler '/api/v1/visits-daily'
+request_handler '/api/v1/examinations-daily'
+request_handler '/api/v1/inpatient-daily'
+request_handler '/api/v1/transfers-daily'
+request_handler '/api/v1/prescriptions-daily'
+request_handler '/api/v1/cost-confirmations-daily'
+request_handler '/api/v1/gender-daily'
+request_handler '/api/v1/patient-types-daily'
 
 unauthenticated_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --get \
   --data-urlencode "from_date=$FROM_DATE" \

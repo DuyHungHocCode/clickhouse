@@ -66,8 +66,15 @@ FROM_DATE=2026-10-01 TO_DATE=2026-10-31 \
 api/tests/smoke-dashboard-api.sh
 ```
 
-Smoke test kiểm tra ba handler, JSON response, authentication bắt buộc và việc
+Migration tạo mười một handler. Có thể chạy lại để bổ sung handler chưa có nhờ
+`CREATE HANDLER IF NOT EXISTS`; nếu cần đổi SQL của một handler đang tồn tại,
+dùng `ALTER HANDLER <name> AS ...` trong migration riêng.
+
+Smoke test kiểm tra mười một handler, JSON response, authentication bắt buộc và việc
 `dashboard_api` bị từ chối khi đọc raw data. Nó không chạy trong máy phát triển
 này vì ClickHouse đích chưa sẵn sàng.
+
+Xem [hướng dẫn gọi và test từng HTTP API](api/TESTING.md) để có lệnh `curl`,
+kiểm tra quyền và chẩn đoán lỗi `ACCESS_DENIED`.
 
 Stop without deleting data: `docker compose down`.

@@ -21,7 +21,19 @@ Mỗi endpoint chỉ nhận `GET`, Basic Authentication, và hai query parameter
 buộc theo định dạng `YYYY-MM-DD`: `from_date`, `to_date`. Khoảng ngày tối đa
 là 366 ngày và `from_date` không được sau `to_date`.
 
-## 1. Khắc phục toàn bộ quyền còn thiếu (chỉ với server đã deploy bản cũ)
+## 1. Nâng server đang có ba API lên mười một API
+
+Nếu server đã chạy phiên bản cũ chỉ có ba endpoint, phải chạy lại **toàn bộ**
+`api/01-dashboard-api.sql` theo lệnh deploy trong `README.md`, bao gồm
+`--param_dashboard_api_password`. Migration dùng `CREATE HANDLER IF NOT EXISTS`
+nên giữ nguyên ba handler cũ và tạo tám handler mới, đồng thời tạo API views,
+grants và dependency cho demographic marts.
+
+Không dùng riêng batch grant bên dưới để nâng cấp: batch đó chỉ sửa quyền cho
+một deployment đã nạp migration nhưng vẫn báo `dashboard_view_owner: Not enough
+privileges`.
+
+## 2. Khắc phục toàn bộ quyền còn thiếu (chỉ với deployment đã nạp migration)
 
 Các Gold mart gọi tiếp các Silver view và các view này dùng 18 bảng Raw. Chạy
 **một lần** bằng tài khoản admin để không phải sửa lần lượt theo từng lỗi
@@ -59,13 +71,13 @@ GRANT SELECT ON hms_raw.tiep_nhan TO dashboard_view_owner;
 SQL
 ```
 
-Không cần chạy lại `api/01-dashboard-api.sql` trên server hiện tại: lệnh trên
-chỉ bổ sung quyền còn thiếu. Các quyền Raw chỉ thuộc `dashboard_view_owner`
-với `HOST NONE`, không thuộc `dashboard_api`; API HTTP vì vậy vẫn chỉ đọc mười
-một API view. Bản `api/01-dashboard-api.sql` trong source đã có các quyền này cho
+Batch này chỉ bổ sung quyền còn thiếu; nó không tạo route, API view hay grant
+cho `dashboard_api`. Các quyền Raw chỉ thuộc `dashboard_view_owner` với
+`HOST NONE`, không thuộc `dashboard_api`; API HTTP vì vậy vẫn chỉ đọc mười một
+API view. Bản `api/01-dashboard-api.sql` trong source đã có các quyền này cho
 các lần deploy mới.
 
-## 2. Xác minh migration bằng admin
+## 3. Xác minh migration bằng admin
 
 Lệnh này phải chạy không có `ACCESS_DENIED`; nó kiểm tra user, profile, quota,
 tất cả views/handlers và đọc thử từng API view.
@@ -80,7 +92,7 @@ docker compose exec -T clickhouse \
   --multiquery < api/02-verify-dashboard-api.sql
 ```
 
-## 3. Khai báo biến để test HTTP
+## 4. Khai báo biến để test HTTP
 
 Thay `CLICKHOUSE_URL` bằng host/port thực tế. Nếu dùng reverse proxy TLS, dùng
 `https://...`; nếu gọi trực tiếp HTTP mặc định, dùng `http://host:8123`.
@@ -103,7 +115,7 @@ printf 'user = "%s:%s"\n' "$DASHBOARD_API_USER" "$DASHBOARD_API_PASSWORD" > "$cu
 `curl -u user:password` nếu đang chạy trên server nhiều người dùng, vì mật khẩu
 có thể xuất hiện trong process list.
 
-## 4. Gọi từng API
+## 5. Gọi từng API
 
 Kết quả được trả về dưới dạng `JSONEachRow`; `jq -s .` gom các dòng JSON thành
 một mảng để dễ đọc. Mảng rỗng là hợp lệ khi khoảng ngày chưa có dữ liệu.
@@ -129,7 +141,7 @@ request_api '/api/v1/gender-daily'
 request_api '/api/v1/patient-types-daily'
 ```
 
-## 5. Chạy toàn bộ smoke test
+## 6. Chạy toàn bộ smoke test
 
 Script có sẵn gọi cả mười một API, kiểm tra JSON, yêu cầu authentication, và xác nhận
 `dashboard_api` không thể đọc dữ liệu raw, silver, hoặc Gold không được expose.
@@ -150,7 +162,7 @@ Kết quả mong đợi:
 PASS: dashboard API smoke test
 ```
 
-## 6. Kiểm tra các trường hợp bị từ chối
+## 7. Kiểm tra các trường hợp bị từ chối
 
 Không gửi credential phải trả HTTP `401` hoặc `403`:
 
@@ -180,7 +192,7 @@ curl --config "$curl_config" --fail-with-body --silent --show-error --get \
 
 Lệnh cuối phải thất bại và chứa `ACCESS_DENIED`.
 
-## 7. Chẩn đoán khi API lỗi
+## 8. Chẩn đoán khi API lỗi
 
 Kiểm tra handler đã được tạo:
 

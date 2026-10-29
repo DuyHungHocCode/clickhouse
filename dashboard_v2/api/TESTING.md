@@ -141,6 +141,68 @@ request_api '/api/v1/gender-daily'
 request_api '/api/v1/patient-types-daily'
 ```
 
+### Test contract cho từng API
+
+Block sau gọi độc lập từng endpoint. Nếu khoảng ngày không có dữ liệu, kết quả
+rỗng vẫn là hợp lệ; nếu có dữ liệu, test kiểm tra các field bắt buộc của Gold
+mart tương ứng. Chạy block này sau khi đã khai báo biến ở phần **4**.
+
+```bash
+set -euo pipefail
+
+test_api() {
+  local name="$1" path="$2" schema="$3" body
+  body="$(curl --config "$curl_config" --fail-with-body --silent --show-error --get \
+    --data-urlencode "from_date=$FROM_DATE" \
+    --data-urlencode "to_date=$TO_DATE" \
+    "$CLICKHOUSE_URL$path")"
+
+  if test -z "$body"; then
+    printf 'PASS: %s (không có dữ liệu trong khoảng ngày)\n' "$name"
+    return
+  fi
+
+  printf '%s\n' "$body" | jq -s -e "$schema" >/dev/null
+  printf 'PASS: %s\n' "$name"
+}
+
+test_api 'dashboard-summary' '/api/v1/dashboard-summary' \
+  'all(.[]; has("ngay") and has("so_luot_tiep_nhan") and has("so_luot_kham") and has("so_luot_cap_cuu") and has("so_ca_vao_vien") and has("so_ca_ra_vien") and has("so_ca_chuyen_vien") and has("so_don_thuoc") and has("so_chi_dinh_dich_vu") and has("so_xac_nhan_chi_phi_bhyt") and has("so_xuat_xml") and has("tong_doanh_thu_thuan"))'
+
+test_api 'revenue-daily' '/api/v1/revenue-daily' \
+  'all(.[]; has("ngay") and has("nhom_doanh_thu") and has("tong_doanh_thu_thuan"))'
+
+test_api 'icd10' '/api/v1/icd10' \
+  'all(.[]; has("ngay") and has("ma_chuong_icd10") and has("ten_chuong_icd10") and has("ma_nhom_icd10") and has("ten_nhom_icd10") and has("ma_icd10") and has("ten_benh") and has("loai_thanh_toan") and has("so_ban_ghi") and has("so_luot_kcb") and has("so_benh_nhan"))'
+
+test_api 'visits-daily' '/api/v1/visits-daily' \
+  'all(.[]; has("ngay") and has("so_luot_tiep_nhan") and has("so_luot_kham") and has("so_luot_cap_cuu"))'
+
+test_api 'examinations-daily' '/api/v1/examinations-daily' \
+  'all(.[]; has("ngay") and has("so_luot_kham"))'
+
+test_api 'inpatient-daily' '/api/v1/inpatient-daily' \
+  'all(.[]; has("ngay") and has("so_ca_vao_vien") and has("so_ca_ra_vien"))'
+
+test_api 'transfers-daily' '/api/v1/transfers-daily' \
+  'all(.[]; has("ngay") and has("so_ca_chuyen_vien"))'
+
+test_api 'prescriptions-daily' '/api/v1/prescriptions-daily' \
+  'all(.[]; has("ngay") and has("so_don_thuoc"))'
+
+test_api 'cost-confirmations-daily' '/api/v1/cost-confirmations-daily' \
+  'all(.[]; has("ngay") and has("so_xac_nhan_chi_phi_bhyt") and has("so_xuat_xml"))'
+
+test_api 'gender-daily' '/api/v1/gender-daily' \
+  'all(.[]; has("ngay") and has("c_nam") and has("c_nu") and has("c_chua_xac_dinh"))'
+
+test_api 'patient-types-daily' '/api/v1/patient-types-daily' \
+  'all(.[]; has("ngay") and has("c_can_bo_cand") and has("c_nguoi_dan"))'
+```
+
+Kết quả mong đợi: 11 dòng `PASS`. Một endpoint trả HTTP non-2xx, JSON không
+hợp lệ, hoặc thiếu field sẽ dừng block với exit code khác `0`.
+
 ## 6. Chạy toàn bộ smoke test
 
 Script có sẵn gọi cả mười một API, kiểm tra JSON, yêu cầu authentication, và xác nhận
@@ -205,7 +267,7 @@ docker compose exec -T clickhouse \
 Nếu lỗi chứa `dashboard_view_owner: Not enough privileges`, cấp đúng quyền được
 nêu trong lỗi cho `dashboard_view_owner`; không cấp quyền đó cho
 `dashboard_api`. Sau đó chạy lại phần **2**. Điều này giữ tài khoản được expose
-qua HTTP chỉ có quyền đọc ba API view.
+qua HTTP chỉ có quyền đọc mười một API view.
 
 Khi xong, xóa secret khỏi shell hiện tại:
 

@@ -7,6 +7,9 @@ denied_query=0
 for argument in "$@"; do
   test "$argument" = '--write-out' && write_status=1
   case "$argument" in
+    */api/v1/*) test -z "${CURL_FIXTURE_LOG:-}" || printf '%s\n' "$argument" >> "$CURL_FIXTURE_LOG" ;;
+  esac
+  case "$argument" in
     *hms_raw.benh_nhan_dot_dieu_tri*|*hms_silver.ct_luot_kham*|*hms_gold.dm_luot_kham_ngay*) denied_query=1 ;;
   esac
 done

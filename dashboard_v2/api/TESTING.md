@@ -21,23 +21,10 @@ Mỗi endpoint chỉ nhận `GET`, Basic Authentication, và hai query parameter
 buộc theo định dạng `YYYY-MM-DD`: `from_date`, `to_date`. Khoảng ngày tối đa
 là 366 ngày và `from_date` không được sau `to_date`.
 
-## 1. Nâng server đang có ba API lên mười một API
+## 1. Khắc phục quyền đang thiếu (chỉ với server đã deploy bản cũ)
 
-Nếu server đã chạy phiên bản cũ chỉ có ba endpoint, phải chạy lại **toàn bộ**
-`api/01-dashboard-api.sql` theo lệnh deploy trong `README.md`, bao gồm
-`--param_dashboard_api_password`. Migration dùng `CREATE HANDLER IF NOT EXISTS`
-nên giữ nguyên ba handler cũ và tạo tám handler mới, đồng thời tạo API views,
-grants và dependency cho demographic marts.
-
-Không dùng riêng batch grant bên dưới để nâng cấp: batch đó chỉ sửa quyền cho
-một deployment đã nạp migration nhưng vẫn báo `dashboard_view_owner: Not enough
-privileges`.
-
-## 2. Khắc phục toàn bộ quyền còn thiếu (chỉ với deployment đã nạp migration)
-
-Các Gold mart gọi tiếp các Silver view và các view này dùng 18 bảng Raw. Chạy
-**một lần** bằng tài khoản admin để không phải sửa lần lượt theo từng lỗi
-`ACCESS_DENIED`:
+Lỗi `dashboard_view_owner ... ct_chi_dinh_dich_vu` là do view KPI tổng hợp đọc
+trực tiếp bảng Silver này. Chạy **một lần** bằng tài khoản admin:
 
 ```bash
 read -rsp 'ClickHouse admin password: ' CLICKHOUSE_PASSWORD; echo

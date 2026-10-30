@@ -1,0 +1,14 @@
+<clickhouse>
+  <users>
+    <!--
+      Deployment-only administrator. This account can manage users and roles,
+      manage named collections, and view their stored secrets. Do not use it
+      from the dashboard or application runtime.
+    -->
+    <admin>
+      <access_management>1</access_management>
+      <named_collection_control>1</named_collection_control>
+      <show_named_collections_secrets>1</show_named_collections_secrets>
+    </admin>
+  </users>
+</clickhouse>

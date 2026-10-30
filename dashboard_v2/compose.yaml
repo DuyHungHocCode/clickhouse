@@ -12,6 +12,7 @@ services:
       - "100.90.202.114:9000:9000"
     volumes:
       - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/users.d/admin-access.xml:/etc/clickhouse-server/users.d/admin-access.xml:ro
     networks: [hms_cdc]
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --user admin --password $$CLICKHOUSE_PASSWORD --query 'SELECT 1'"]
